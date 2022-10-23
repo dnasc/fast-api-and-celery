@@ -1,0 +1,46 @@
+version: "3.8"
+services:
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: api
+    ports:
+      - "8080:80"
+    command: gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.api.server:app --bind 0.0.0.0:80
+    # command: "uvicorn app.api.server:app --host 0.0.0.0 --port 80 --reload"
+    environment:
+      CELERY_MAIN: __celery__
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      PYTHONBREAKPOINT: ipdb.set_trace
+    volumes:
+      - ./app:/code/app
+    depends_on:
+      - worker
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    container_name: worker
+    command: "watchmedo auto-restart -d app/worker/ -p '*.py' -- celery --app=app.worker.worker worker"
+    environment:
+      CELERY_MAIN: __celery__
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      PYTHONBREAKPOINT: ipdb.set_trace
+    volumes:
+      - ./app:/code/app
+    depends_on:
+      - redis
+
+  redis:
+    container_name: redis
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
